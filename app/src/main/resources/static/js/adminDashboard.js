@@ -1,72 +1,135 @@
-/*
-  This script handles the admin dashboard functionality for managing doctors:
-  - Loads all doctor cards
-  - Filters doctors by name, time, or specialty
-  - Adds a new doctor via modal form
+/**
+ * adminDashboard.js
+ * Logic for managing the Doctor grid, filtering, and adding new records.
+ */
 
+import { getDoctors, filterDoctors, saveDoctor } from './doctorServices.js';
+import { createDoctorCard } from './doctorCard.js';
+import { openModal, closeModal } from './util.js';
 
-  Attach a click listener to the "Add Doctor" button
-  When clicked, it opens a modal form using openModal('addDoctor')
+// Elements
+const contentArea = document.getElementById("content");
+const searchBar = document.getElementById("searchBar");
+const filterTime = document.getElementById("filter-time");
+const filterSpecialty = document.getElementById("filter-specialty");
+const addDocBtn = document.getElementById("addDocBtn");
 
+/**
+ * 1. Initialize Event Listeners
+ */
+document.addEventListener("DOMContentLoaded", () => {
+    // Load initial data
+    loadDoctorCards();
 
-  When the DOM is fully loaded:
-    - Call loadDoctorCards() to fetch and display all doctors
+    // Attach listener for Add Doctor button
+    if (addDocBtn) {
+        addDocBtn.addEventListener("click", () => openModal('addDoctor'));
+    }
 
+    // Attach listeners for Search and Filters
+    if (searchBar) searchBar.addEventListener("input", filterDoctorsOnChange);
+    if (filterTime) filterTime.addEventListener("change", filterDoctorsOnChange);
+    if (filterSpecialty) filterSpecialty.addEventListener("change", filterDoctorsOnChange);
+});
 
-  Function: loadDoctorCards
-  Purpose: Fetch all doctors and display them as cards
+/**
+ * 2. Function: loadDoctorCards
+ * Purpose: Initial fetch of all doctors
+ */
+async function loadDoctorCards() {
+    try {
+        const doctors = await getDoctors();
+        renderDoctorCards(doctors);
+    } catch (error) {
+        console.error("Failed to load doctor cards:", error);
+        contentArea.innerHTML = `<p class="error">Error loading doctors. Please try again later.</p>`;
+    }
+}
 
-    Call getDoctors() from the service layer
-    Clear the current content area
-    For each doctor returned:
-    - Create a doctor card using createDoctorCard()
-    - Append it to the content div
+/**
+ * 3. Function: filterDoctorsOnChange
+ * Purpose: Reactive filtering based on UI inputs
+ */
+async function filterDoctorsOnChange() {
+    const name = searchBar.value.trim() || null;
+    const time = filterTime.value || null;
+    const specialty = filterSpecialty.value || null;
 
-    Handle any fetch errors by logging them
+    try {
+        const response = await filterDoctors(name, time, specialty);
+        const doctors = response.doctors || [];
 
+        if (doctors.length > 0) {
+            renderDoctorCards(doctors);
+        } else {
+            contentArea.innerHTML = `<p class="no-results">No doctors found with the given filters.</p>`;
+        }
+    } catch (error) {
+        console.error("Filtering error:", error);
+        alert("An error occurred while filtering. Please try again.");
+    }
+}
 
-  Attach 'input' and 'change' event listeners to the search bar and filter dropdowns
-  On any input change, call filterDoctorsOnChange()
+/**
+ * 4. Function: renderDoctorCards
+ * Helper to clear and repopulate the grid
+ */
+function renderDoctorCards(doctors) {
+    contentArea.innerHTML = ""; // Clear current content
+    doctors.forEach(doctor => {
+        const card = createDoctorCard(doctor);
+        contentArea.appendChild(card);
+    });
+}
 
+/**
+ * 5. Function: adminAddDoctor
+ * Global function for the "Save" button in the Add Doctor Modal
+ */
+window.adminAddDoctor = async () => {
+    // Collect form data
+    const name = document.getElementById("docName").value;
+    const email = document.getElementById("docEmail").value;
+    const phone = document.getElementById("docPhone").value;
+    const password = document.getElementById("docPassword").value;
+    const specialty = document.getElementById("docSpecialty").value;
+    const availableTimes = document.getElementById("docTimes").value; // e.g., "AM, PM"
 
-  Function: filterDoctorsOnChange
-  Purpose: Filter doctors based on name, available time, and specialty
+    // Auth Check
+    const token = localStorage.getItem("token");
+    if (!token) {
+        alert("Authentication error. Please log in again.");
+        window.location.href = "/";
+        return;
+    }
 
-    Read values from the search bar and filters
-    Normalize empty values to null
-    Call filterDoctors(name, time, specialty) from the service
+    // Validation
+    if (!name || !email || !specialty) {
+        alert("Please fill in the required fields (Name, Email, Specialty).");
+        return;
+    }
 
-    If doctors are found:
-    - Render them using createDoctorCard()
-    If no doctors match the filter:
-    - Show a message: "No doctors found with the given filters."
+    const newDoctor = {
+        name,
+        email,
+        phone,
+        password,
+        specialization: specialty,
+        availableTimes: availableTimes.split(",").map(t => t.trim()) // Convert string to array
+    };
 
-    Catch and display any errors with an alert
+    try {
+        const result = await saveDoctor(newDoctor, token);
 
-
-  Function: renderDoctorCards
-  Purpose: A helper function to render a list of doctors passed to it
-
-    Clear the content area
-    Loop through the doctors and append each card to the content area
-
-
-  Function: adminAddDoctor
-  Purpose: Collect form data and add a new doctor to the system
-
-    Collect input values from the modal form
-    - Includes name, email, phone, password, specialty, and available times
-
-    Retrieve the authentication token from localStorage
-    - If no token is found, show an alert and stop execution
-
-    Build a doctor object with the form values
-
-    Call saveDoctor(doctor, token) from the service
-
-    If save is successful:
-    - Show a success message
-    - Close the modal and reload the page
-
-    If saving fails, show an error message
-*/
+        if (result.success) {
+            alert("Doctor added successfully!");
+            closeModal();
+            location.reload(); // Reload to show the new card
+        } else {
+            alert(`Error: ${result.message}`);
+        }
+    } catch (error) {
+        console.error("Save Doctor Error:", error);
+        alert("Failed to save doctor. Check console for details.");
+    }
+};
