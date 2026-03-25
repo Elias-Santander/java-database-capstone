@@ -1,34 +1,67 @@
 package com.project.back_end.services;
 
+import com.project.back_end.models.Prescription;
+import com.project.back_end.repo.PrescriptionRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
 public class PrescriptionService {
-    
- // 1. **Add @Service Annotation**:
-//    - The `@Service` annotation marks this class as a Spring service component, allowing Spring's container to manage it.
-//    - This class contains the business logic related to managing prescriptions in the healthcare system.
-//    - Instruction: Ensure the `@Service` annotation is applied to mark this class as a Spring-managed service.
 
-// 2. **Constructor Injection for Dependencies**:
-//    - The `PrescriptionService` class depends on the `PrescriptionRepository` to interact with the database.
-//    - It is injected through the constructor, ensuring proper dependency management and enabling testing.
-//    - Instruction: Constructor injection is a good practice, ensuring that all necessary dependencies are available at the time of service initialization.
+    private final PrescriptionRepository prescriptionRepository;
 
-// 3. **savePrescription Method**:
-//    - This method saves a new prescription to the database.
-//    - Before saving, it checks if a prescription already exists for the same appointment (using the appointment ID).
-//    - If a prescription exists, it returns a `400 Bad Request` with a message stating the prescription already exists.
-//    - If no prescription exists, it saves the new prescription and returns a `201 Created` status with a success message.
-//    - Instruction: Handle errors by providing appropriate status codes and messages, ensuring that multiple prescriptions for the same appointment are not saved.
+    public PrescriptionService(PrescriptionRepository prescriptionRepository) {
+        this.prescriptionRepository = prescriptionRepository;
+    }
 
-// 4. **getPrescription Method**:
-//    - Retrieves a prescription associated with a specific appointment based on the `appointmentId`.
-//    - If a prescription is found, it returns it within a map wrapped in a `200 OK` status.
-//    - If there is an error while fetching the prescription, it logs the error and returns a `500 Internal Server Error` status with an error message.
-//    - Instruction: Ensure that this method handles edge cases, such as no prescriptions found for the given appointment, by returning meaningful responses.
+    /**
+     * 1. savePrescription: Guarda una receta en MongoDB.
+     * Retorna 201 Created en éxito o 500 en error.
+     */
+    public ResponseEntity<Map<String, String>> savePrescription(Prescription prescription) {
+        Map<String, String> response = new HashMap<>();
+        try {
+            // Intento de guardado en la base de datos
+            prescriptionRepository.save(prescription);
 
-// 5. **Exception Handling and Error Responses**:
-//    - Both methods (`savePrescription` and `getPrescription`) contain try-catch blocks to handle exceptions that may occur during database interaction.
-//    - If an error occurs, the method logs the error and returns an HTTP `500 Internal Server Error` response with a corresponding error message.
-//    - Instruction: Ensure that all potential exceptions are handled properly, and meaningful responses are returned to the client.
+            response.put("message", "Receta guardada");
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
 
+        } catch (Exception e) {
+            // Manejo de error genérico según instrucciones
+            response.put("message", "Error interno al intentar guardar la receta");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 
+    /**
+     * 2. getPrescription: Recupera la receta asociada a una cita específica.
+     * Retorna 200 OK con los detalles o 500 en caso de error.
+     */
+    public ResponseEntity<Map<String, Object>> getPrescription(Long appointmentId) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            // Intento de obtener la receta por ID de cita
+            List<Prescription> prescriptions = prescriptionRepository.findByAppointmentId(appointmentId);
+
+            if (prescriptions.isEmpty()) {
+                response.put("message", "No se encontró ninguna receta para esta cita.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            // Éxito: devolvemos la receta encontrada
+            response.put("prescription", prescriptions.get(0));
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            // Manejo de error en la recuperación
+            response.put("message", "Error al recuperar la receta");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 }

@@ -1,45 +1,195 @@
 package com.project.back_end.services;
 
+import com.project.back_end.DTO.AppointmentDTO;
+import com.project.back_end.models.Appointment;
+import com.project.back_end.models.Doctor;
+import com.project.back_end.repo.AppointmentRepository;
+import com.project.back_end.repo.DoctorRepository;
+import com.project.back_end.repo.PatientRepository;
+import jakarta.transaction.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
 public class AppointmentService {
-// 1. **Add @Service Annotation**:
-//    - To indicate that this class is a service layer class for handling business logic.
-//    - The `@Service` annotation should be added before the class declaration to mark it as a Spring service component.
-//    - Instruction: Add `@Service` above the class definition.
+    // 2. Constructor Injection for Dependencies
+    private final AppointmentRepository appointmentRepo;
+    private final PatientRepository patientRepo;
+    private final DoctorRepository doctorRepo;
+    private final SharedService sharedService;
+    private final TokenService tokenService;
 
-// 2. **Constructor Injection for Dependencies**:
-//    - The `AppointmentService` class requires several dependencies like `AppointmentRepository`, `Service`, `TokenService`, `PatientRepository`, and `DoctorRepository`.
-//    - These dependencies should be injected through the constructor.
-//    - Instruction: Ensure constructor injection is used for proper dependency management in Spring.
+    public AppointmentService(AppointmentRepository appointmentRepo,
+                              PatientRepository patientRepo,
+                              DoctorRepository doctorRepo,
+                              SharedService sharedService,
+                              TokenService tokenService) {
+        this.appointmentRepo = appointmentRepo;
+        this.patientRepo = patientRepo;
+        this.doctorRepo = doctorRepo;
+        this.sharedService = sharedService;
+        this.tokenService = tokenService;
+    }
 
-// 3. **Add @Transactional Annotation for Methods that Modify Database**:
-//    - The methods that modify or update the database should be annotated with `@Transactional` to ensure atomicity and consistency of the operations.
-//    - Instruction: Add the `@Transactional` annotation above methods that interact with the database, especially those modifying data.
+    /**
+     * 4. Book Appointment Method
+     */
+    @Transactional
+    public int bookAppointment(Appointment appointment) {
+        try {
+            appointmentRepo.save(appointment);
+            return 1;
+        } catch (Exception e) {
+            System.err.println("Error booking appointment: " + e.getMessage());
+            return 0;
+        }
+    }
 
-// 4. **Book Appointment Method**:
-//    - Responsible for saving the new appointment to the database.
-//    - If the save operation fails, it returns `0`; otherwise, it returns `1`.
-//    - Instruction: Ensure that the method handles any exceptions and returns an appropriate result code.
+    /**
+     * updateAppointment: Actualiza una cita existente previa validación.
+     */
+    @Transactional
+    public ResponseEntity<Map<String, String>> updateAppointment(Appointment appointment) {
+        Map<String, String> response = new HashMap<>();
 
-// 5. **Update Appointment Method**:
-//    - This method is used to update an existing appointment based on its ID.
-//    - It validates whether the patient ID matches, checks if the appointment is available for updating, and ensures that the doctor is available at the specified time.
-//    - If the update is successful, it saves the appointment; otherwise, it returns an appropriate error message.
-//    - Instruction: Ensure proper validation and error handling is included for appointment updates.
+        // Sugerencia: Verificar si la cita existe
+        return appointmentRepo.findById(appointment.getId()).map(existingApp -> {
 
-// 6. **Cancel Appointment Method**:
-//    - This method cancels an appointment by deleting it from the database.
-//    - It ensures the patient who owns the appointment is trying to cancel it and handles possible errors.
-//    - Instruction: Make sure that the method checks for the patient ID match before deleting the appointment.
+            // Sugerencia: Verificar si la actualización es válida (reglas de negocio)
+            if (sharedService.validateAppointment(appointment) == 1) {
+                appointmentRepo.save(appointment);
+                response.put("message", "Success: Appointment updated.");
+                return ResponseEntity.ok(response);
+            } else {
+                response.put("message", "Failed: Invalid appointment data or schedule conflict.");
+                return ResponseEntity.badRequest().body(response);
+            }
 
-// 7. **Get Appointments Method**:
-//    - This method retrieves a list of appointments for a specific doctor on a particular day, optionally filtered by the patient's name.
-//    - It uses `@Transactional` to ensure that database operations are consistent and handled in a single transaction.
-//    - Instruction: Ensure the correct use of transaction boundaries, especially when querying the database for appointments.
+        }).orElseGet(() -> {
+            response.put("message", "Error: Appointment ID not found.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        });
+    }
 
-// 8. **Change Status Method**:
-//    - This method updates the status of an appointment by changing its value in the database.
-//    - It should be annotated with `@Transactional` to ensure the operation is executed in a single transaction.
-//    - Instruction: Add `@Transactional` before this method to ensure atomicity when updating appointment status.
+    /**
+     * cancelAppointment: Cancela una cita eliminándola de la base de datos.
+     */
+    @Transactional
+    public ResponseEntity<Map<String, String>> cancelAppointment(long id, String token) {
+        Map<String, String> response = new HashMap<>();
 
+        return appointmentRepo.findById(id).map(appointment -> {
 
+            // CORRECCIÓN: Extraer identificador (email) y buscar al paciente
+            String emailFromToken = tokenService.extractIdentifier(token);
+
+            // Validar que el paciente que cancela sea el dueño de la cita
+            if (!appointment.getPatient().getEmail().equals(emailFromToken)) {
+                response.put("message", "Unauthorized: Token mismatch.");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+
+            appointmentRepo.delete(appointment);
+            response.put("message", "Success: Appointment cancelled.");
+            return ResponseEntity.ok(response);
+
+        }).orElseGet(() -> {
+            response.put("message", "Error: Appointment not found.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        });
+    }
+
+    /**
+     * getAppointment: Recupera citas para un doctor y fecha, con filtro opcional de nombre.
+     */
+    @Transactional
+    public Map<String, Object> getAppointment(String pname, LocalDate date, String token) {
+        Map<String, Object> response = new HashMap<>();
+
+        // CORRECCIÓN: Extraer el identifier (email del doctor)
+        String doctorEmail = tokenService.extractIdentifier(token);
+
+        // Buscar al doctor para obtener su ID real
+        Long doctorId = doctorRepo.findByEmail(doctorEmail)
+                .map(Doctor::getId)
+                .orElse(null);
+
+        if (doctorId == null) {
+            response.put("appointments", new ArrayList<>());
+            return response;
+        }
+
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.atTime(LocalTime.MAX);
+
+        List<Appointment> appointments;
+        if (pname == null || pname.trim().isEmpty() || pname.equals("null")) {
+            appointments = appointmentRepo.findByDoctorIdAndAppointmentTimeBetween(doctorId, start, end);
+        } else {
+            appointments = appointmentRepo.findByDoctorIdAndPatient_NameContainingIgnoreCaseAndAppointmentTimeBetween(
+                    doctorId, pname, start, end
+            );
+        }
+
+        // Convertir la lista a DTOs usando el método corregido anteriormente
+        response.put("appointments", appointments.stream().map(this::convertToDTO).collect(Collectors.toList()));
+        return response;
+    }
+
+    /**
+     * 8. Change Status Method
+     */
+    @Transactional
+    public void changeStatus(Long appointmentId, int newStatus) {
+        appointmentRepo.updateStatus(newStatus, appointmentId);
+    }
+
+    /**
+     * Método Auxiliar: Convertir Entidad a DTO completo.
+     * Mapea todos los atributos definidos en AppointmentDTO desde la entidad Appointment.
+     */
+    private AppointmentDTO convertToDTO(Appointment appointment) {
+        AppointmentDTO dto = new AppointmentDTO();
+
+        // 1. Datos básicos de la cita
+        dto.setId(appointment.getId());
+        dto.setAppointmentTime(appointment.getAppointmentTime());
+        dto.setStatus(appointment.getStatus());
+
+        // 2. Datos del Doctor (extraídos del objeto Doctor de la entidad)
+        if (appointment.getDoctor() != null) {
+            dto.setDoctorId(appointment.getDoctor().getId());
+            dto.setDoctorName(appointment.getDoctor().getName());
+        }
+
+        // 3. Datos del Paciente (extraídos del objeto Patient de la entidad)
+        if (appointment.getPatient() != null) {
+            dto.setPatientId(appointment.getPatient().getId());
+            dto.setPatientName(appointment.getPatient().getName());
+            dto.setPatientEmail(appointment.getPatient().getEmail());
+            dto.setPatientPhone(appointment.getPatient().getPhone());
+            dto.setPatientAddress(appointment.getPatient().getAddress());
+        }
+
+        // 4. Campos calculados para facilidad del Frontend
+        if (appointment.getAppointmentTime() != null) {
+            dto.setAppointmentDate(appointment.getAppointmentTime().toLocalDate());
+            dto.setAppointmentTimeOnly(appointment.getAppointmentTime().toLocalTime());
+
+            // Asumiendo una duración estándar (ej. 30 min) si la entidad no tiene endTime
+            dto.setEndTime(appointment.getAppointmentTime().plusMinutes(30));
+        }
+
+        return dto;
+    }
 }

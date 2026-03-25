@@ -32,6 +32,9 @@ public class AppointmentDTO {
 
     private LocalDateTime endTime;
 
+    public AppointmentDTO() {
+    }
+
     public AppointmentDTO(Long id, Long doctorId, String doctorName, Long patientId, String patientName, String patientEmail, String patientPhone, String patientAddress, LocalDateTime appointmentTime, int status, LocalDate appointmentDate, LocalTime appointmentTimeOnly, LocalDateTime endTime) {
         this.id = id;
         this.doctorId = doctorId;
@@ -100,4 +103,55 @@ public class AppointmentDTO {
         return endTime;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setDoctorId(Long doctorId) {
+        this.doctorId = doctorId;
+    }
+
+    public void setDoctorName(String doctorName) {
+        this.doctorName = doctorName;
+    }
+
+    public void setPatientId(Long patientId) {
+        this.patientId = patientId;
+    }
+
+    public void setPatientName(String patientName) {
+        this.patientName = patientName;
+    }
+
+    public void setPatientEmail(String patientEmail) {
+        this.patientEmail = patientEmail;
+    }
+
+    public void setPatientPhone(String patientPhone) {
+        this.patientPhone = patientPhone;
+    }
+
+    public void setPatientAddress(String patientAddress) {
+        this.patientAddress = patientAddress;
+    }
+
+    public void setAppointmentTime(LocalDateTime appointmentTime) {
+        this.appointmentTime = appointmentTime;
+    }
+
+    public void setStatus(int status) {
+        this.status = status;
+    }
+
+    public void setAppointmentDate(LocalDate appointmentDate) {
+        this.appointmentDate = appointmentDate;
+    }
+
+    public void setAppointmentTimeOnly(LocalTime appointmentTimeOnly) {
+        this.appointmentTimeOnly = appointmentTimeOnly;
+    }
+
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
 }
