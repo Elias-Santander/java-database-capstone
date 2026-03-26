@@ -1,0 +1,15 @@
+name: Lint Frontend
+
+on: [push, pull_request]
+
+jobs: lint-frontend: runs-on: ubuntu-latest name: Lint HTML, CSS, y JS steps: - uses: actions/checkout@v3
+
+      - name: Configurar Node.js uses: actions/setup-node@v4 with: node-version: '18'
+
+      - name: Instalar linters run: | npm install -g htmlhint stylelint eslint
+
+      - name: Revisar HTML run: htmlhint app/src/main/resources/static/assets/pages//*.html || true
+
+      - name: Revisar CSS run: stylelint "app/src/main/resources/static/assets/css//*.css" || true
+
+      - name: Revisar JS run: eslint app/src/main/resources/static/assets/js//*.js || true

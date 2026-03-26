@@ -1,0 +1,21 @@
+name: Compilar Backend de Java
+
+on: [push, pull_request]
+
+jobs:
+  compile-backend:
+    runs-on: ubuntu-latest
+    name: Compilar Código del Backend
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Compilar con Maven
+        run: |
+          cd app
+          mvn clean compile

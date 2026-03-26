@@ -1,52 +1,117 @@
 package com.project.back_end.controllers;
 
+import com.project.back_end.DTO.Login;
+import com.project.back_end.models.Patient;
+import com.project.back_end.services.PatientService;
+import com.project.back_end.services.SharedService; // Tu SharedService
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+// 1. Configurar la Clase del Controlador
+@RestController
+@RequestMapping("/patient")
 public class PatientController {
 
-// 1. Set Up the Controller Class:
-//    - Annotate the class with `@RestController` to define it as a REST API controller for patient-related operations.
-//    - Use `@RequestMapping("/patient")` to prefix all endpoints with `/patient`, grouping all patient functionalities under a common route.
+    // 2. Dependencias Autowired (vía inyección por constructor)
+    private final PatientService patientService;
+    private final SharedService service;
 
+    public PatientController(PatientService patientService, SharedService service) {
+        this.patientService = patientService;
+        this.service = service;
+    }
 
-// 2. Autowire Dependencies:
-//    - Inject `PatientService` to handle patient-specific logic such as creation, retrieval, and appointments.
-//    - Inject the shared `Service` class for tasks like token validation and login authentication.
+    /**
+     * 1. Obtener Detalles del Paciente
+     * Endpoint: GET /patient/{token}
+     */
+    @GetMapping("/{token}")
+    public ResponseEntity<?> getPatient(@PathVariable("token") String token) {
 
+        // Validamos el token para el rol "patient"
+        ResponseEntity<Map<String, String>> auth = service.validateToken(token, "patient");
+        if (auth.getStatusCode() != HttpStatus.OK) {
+            return auth; // Devuelve el error HTTP apropiado (ej. 401 Unauthorized)
+        }
 
-// 3. Define the `getPatient` Method:
-//    - Handles HTTP GET requests to retrieve patient details using a token.
-//    - Validates the token for the `"patient"` role using the shared service.
-//    - If the token is valid, returns patient information; otherwise, returns an appropriate error message.
+        // Obtiene y devuelve los detalles del paciente
+        return ResponseEntity.ok(patientService.getPatientDetails(token));
+    }
 
+    /**
+     * 2. Crear un Nuevo Paciente
+     * Endpoint: POST /patient
+     * (Público: No requiere token porque es el registro inicial)
+     */
+    @PostMapping
+    public ResponseEntity<?> createPatient(@RequestBody Patient patient) {
 
-// 4. Define the `createPatient` Method:
-//    - Handles HTTP POST requests for patient registration.
-//    - Accepts a validated `Patient` object in the request body.
-//    - First checks if the patient already exists using the shared service.
-//    - If validation passes, attempts to create the patient and returns success or error messages based on the outcome.
+        // El PatientService se encarga de verificar si existe y de crearlo
+        int result = patientService.createPatient(patient);
+        Map<String, String> response = new HashMap<>();
 
+        if (result == 1) {
+            response.put("message", "Registro exitoso");
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } else if (result == 0) {
+            response.put("message", "El paciente con el correo electrónico o número de teléfono ya existe");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } else {
+            response.put("message", "Error interno del servidor");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 
-// 5. Define the `login` Method:
-//    - Handles HTTP POST requests for patient login.
-//    - Accepts a `Login` DTO containing email/username and password.
-//    - Delegates authentication to the `validatePatientLogin` method in the shared service.
-//    - Returns a response with a token or an error message depending on login success.
+    /**
+     * 3. Inicio de Sesión del Paciente
+     * Endpoint: POST /patient/login
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Login login) {
+        // Delega la validación de credenciales al SharedService (Service)
+        return service.validatePatientLogin(login);
+    }
 
+    /**
+     * 4. Obtener Citas del Paciente
+     * Endpoint: GET /patient/{id}/{token}
+     */
+    @GetMapping("/{id}/{token}")
+    public ResponseEntity<?> getPatientAppointment(
+            @PathVariable("id") Long id,
+            @PathVariable("token") String token) {
 
-// 6. Define the `getPatientAppointment` Method:
-//    - Handles HTTP GET requests to fetch appointment details for a specific patient.
-//    - Requires the patient ID, token, and user role as path variables.
-//    - Validates the token using the shared service.
-//    - If valid, retrieves the patient's appointment data from `PatientService`; otherwise, returns a validation error.
+        // Validar que la solicitud la hace un paciente válido
+        ResponseEntity<Map<String, String>> auth = service.validateToken(token, "patient");
+        if (auth.getStatusCode() != HttpStatus.OK) {
+            return auth;
+        }
 
+        // Obtiene las citas del paciente utilizando el ID
+        return ResponseEntity.ok(patientService.getPatientAppointment(id, token));
+    }
 
-// 7. Define the `filterPatientAppointment` Method:
-//    - Handles HTTP GET requests to filter a patient's appointments based on specific conditions.
-//    - Accepts filtering parameters: `condition`, `name`, and a token.
-//    - Token must be valid for a `"patient"` role.
-//    - If valid, delegates filtering logic to the shared service and returns the filtered result.
+    /**
+     * 5. Filtrar Citas del Paciente
+     * Endpoint: GET /patient/filter/{condition}/{name}/{token}
+     */
+    @GetMapping("/filter/{condition}/{name}/{token}")
+    public ResponseEntity<?> filterPatientAppointment(
+            @PathVariable("condition") String condition,
+            @PathVariable("name") String name,
+            @PathVariable("token") String token) {
 
+        // Validar el token para asegurar que es un paciente
+        ResponseEntity<Map<String, String>> auth = service.validateToken(token, "patient");
+        if (auth.getStatusCode() != HttpStatus.OK) {
+            return auth;
+        }
 
-
+        // Llama a service.filterPatient() para aplicar los filtros
+        return ResponseEntity.ok(service.filterPatient(condition, name, token));
+    }
 }
-
-
